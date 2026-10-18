@@ -1,0 +1,17 @@
+name: macOS build
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/test.sh
+      - run: bash scripts/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NiuxinReminder-universal
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS.txt

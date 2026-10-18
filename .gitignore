@@ -1,0 +1,8 @@
+/build/
+/dist/
+*.app/
+.DS_Store
+/样式预览.png
+/说明.md
+*.log
+*.dSYM/
