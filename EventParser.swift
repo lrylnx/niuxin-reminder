@@ -4,11 +4,40 @@ struct MessageDetail {
     let customer: String
     let account: String
     let customerID: String
+    var conversationCode: String = ""
 }
 
 enum EventParser {
     private static let messagePattern = try! NSRegularExpression(pattern: #"msg\.msg\.code\.messageId=([^,\] ]+)"#)
     private static let portraitPattern = try! NSRegularExpression(pattern: #"target:(\d+):3, url:(https://img\.alicdn\.com/[^,\s\]]+)"#)
+
+    private static func value(_ key: String, in line: String) -> String? {
+        guard let start = line.range(of: key + "=") else { return nil }
+        let value = line[start.upperBound...].prefix { !$0.isWhitespace && $0 != "," && $0 != "]" }
+        return value.isEmpty ? nil : String(value)
+    }
+
+    static func arrivalConversation(_ line: String) -> String? {
+        guard messageID(line) != nil else { return nil }
+        return value("msg.msg.conversationCode", in: line)
+    }
+
+    // These app events describe our local conversation, unlike SDK read receipts,
+    // which can describe the buyer reading one of our outgoing messages.
+    static func handledConversation(_ line: String) -> String? {
+        if line.contains("][EnterConversation]["),
+           line.contains("MessageDataSourceMessageDataCollector.cpp("),
+           line.contains(") OnEnterConversation]") {
+            return value("m_appConversation", in: line)
+        }
+        if line.contains("][unread nty!]["),
+           line.contains("AppConversationService.cpp("),
+           line.contains(") DealConvUnreadNumUpdate]"),
+           value("unReadNumber", in: line) == "0" {
+            return value("info.ccode", in: line)
+        }
+        return nil
+    }
 
     static func messageID(_ line: String) -> String? {
         guard line.contains("][OnMessageArrive]["), line.contains("ChatService.cpp"),
@@ -28,7 +57,8 @@ enum EventParser {
                 guard let code = message["mcode"] as? [String: Any], let id = code["messageId"] as? String else { return nil }
                 let from = message["fromId"] as? [String: Any] ?? [:]
                 let to = message["toId"] as? [String: Any] ?? [:]
-                return (id, MessageDetail(customer: from["nick"] as? String ?? "", account: to["nick"] as? String ?? "", customerID: from["targetId"] as? String ?? ""))
+                let conversation = event["cid"] as? [String: Any] ?? [:]
+                return (id, MessageDetail(customer: from["nick"] as? String ?? "", account: to["nick"] as? String ?? "", customerID: from["targetId"] as? String ?? "", conversationCode: conversation["ccode"] as? String ?? ""))
             }
         }
     }

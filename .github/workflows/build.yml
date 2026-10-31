@@ -8,10 +8,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/test.sh
-      - run: bash scripts/build.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: NiuxinReminder-universal
-          path: |
-            dist/*.zip
-            dist/SHA256SUMS.txt
+      # The stable local signing key stays in the owner's login keychain.
+      # CI validates code only; deliverable apps must use scripts/build.sh locally.
+      - run: xcrun swiftc -typecheck main.swift EventParser.swift PendingReminders.swift -framework AppKit

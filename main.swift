@@ -8,6 +8,11 @@ final class ReminderCard: NSView {
     var avatar: NSImage?
     var open: (() -> Void)?
     var close: (() -> Void)?
+    private var dragStart = NSPoint.zero
+    private var originStart = NSPoint.zero
+    private var didDrag = false
+    private var pressedClose = false
+    private var headerDrag = false
     override var isFlipped: Bool { true }
     let blue = NSColor(srgbRed: 0.12, green: 0.47, blue: 1, alpha: 1)
 
@@ -48,13 +53,37 @@ final class ReminderCard: NSView {
         text(subtitle, NSRect(x: 76, y: 83, width: 288, height: 20), 12, NSColor(srgbRed: 0.5, green: 0.55, blue: 0.62, alpha: 1))
         NSGraphicsContext.restoreGraphicsState()
     }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if point.x > 364 && point.y < 34 { close?() } else { open?() }
+        pressedClose = point.x > 364 && point.y < 34
+        headerDrag = point.y < 34 && !pressedClose
+        if headerDrag {
+            window?.performDrag(with: event)
+            return
+        }
+        dragStart = NSEvent.mouseLocation
+        originStart = window?.frame.origin ?? .zero
+        didDrag = false
     }
+    override func mouseDragged(with event: NSEvent) {
+        guard !pressedClose && !headerDrag else { return }
+        let point = NSEvent.mouseLocation
+        let dx = point.x - dragStart.x, dy = point.y - dragStart.y
+        if hypot(dx, dy) >= 4 { didDrag = true }
+        if didDrag { window?.setFrameOrigin(NSPoint(x: originStart.x + dx, y: originStart.y + dy)) }
+    }
+    override func mouseUp(with event: NSEvent) {
+        guard !didDrag && !headerDrag else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        if pressedClose {
+            if point.x > 364 && point.y < 34 { close?() }
+        } else { open?() }
+    }
+
 }
 
-final class Reminder: NSObject, NSApplicationDelegate {
+final class Reminder: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let logURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Aliworkbench/System/log/app.log")
     var file: FileHandle?
     var inode: UInt64 = 0
@@ -68,14 +97,16 @@ final class Reminder: NSObject, NSApplicationDelegate {
     var status: NSStatusItem!
     var pauseItem: NSMenuItem!
     var isPaused = false
-    var count = 0
+    var reminders = PendingReminders()
+    var count: Int { reminders.count }
+    var latestID: String? { reminders.latestID }
+    var needsMessageRefresh = false
     var details: [String: MessageDetail] = [:]
     var portraitURLs: [String: String] = [:]
     let imageCache = NSCache<NSString, NSImage>()
     var loading = Set<String>()
     var displayedCustomerID = ""
     var detailOrder: [String] = []
-    var latestID: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let preview = CommandLine.arguments.contains("--preview")
@@ -98,6 +129,8 @@ final class Reminder: NSObject, NSApplicationDelegate {
         status.menu = menu
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 400, height: 124), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = "牛信提醒"
+        panel.delegate = self
+        panel.isMovable = true
         panel.level = .statusBar
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -125,6 +158,7 @@ final class Reminder: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        if CommandLine.arguments.contains("--window-preview") { test(); return }
         seedPortraits()
         attach(skipExisting: true)
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.poll() }
@@ -166,7 +200,7 @@ final class Reminder: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: "牛信提醒",
-            .applicationVersion: "1.0.0",
+            .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.1",
             .credits: NSAttributedString(string: "千牛 macOS 独立消息提醒\n开源项目 · 非阿里巴巴官方应用\ngithub.com/lrylnx/niuxin-reminder\n© 2026 lrylnx · MIT License")
         ])
     }
@@ -207,9 +241,19 @@ final class Reminder: NSObject, NSApplicationDelegate {
                 consume(line)
             }
             if pending.count > 2 * 1024 * 1024 { pending.removeAll() }
+            // Render once per batch so messages already read in the same batch
+            // do not briefly flash a stale reminder.
+            refreshMessages()
         } catch {
             attach(skipExisting: true)
         }
+    }
+
+    func refreshMessages() {
+        guard needsMessageRefresh else { return }
+        needsMessageRefresh = false
+        if let id = latestID { showMessage(id) }
+        else { dismiss() }
     }
 
     func consume(_ line: String) {
@@ -218,15 +262,18 @@ final class Reminder: NSObject, NSApplicationDelegate {
             if details[id] == nil { detailOrder.append(id) }
             details[id] = detail
             if detailOrder.count > 2000 { details.removeValue(forKey: detailOrder.removeFirst()) }
-            if latestID == id && panel.isVisible { showMessage(id) }
+            reminders.associate(id, conversation: detail.conversationCode)
+            if latestID == id { needsMessageRefresh = true }
+        }
+        if let conversation = EventParser.handledConversation(line), reminders.handle(conversation) {
+            needsMessageRefresh = true
         }
         guard !isPaused, let id = EventParser.messageID(line) else { return }
         guard seen.insert(id).inserted else { return }
         order.append(id)
         if order.count > 2000 { seen.remove(order.removeFirst()) }
-        count += 1
-        latestID = id
-        showMessage(id)
+        reminders.add(id, conversation: EventParser.arrivalConversation(line) ?? details[id]?.conversationCode ?? "")
+        needsMessageRefresh = true
     }
 
     func showMessage(_ id: String) {
@@ -250,21 +297,39 @@ final class Reminder: NSObject, NSApplicationDelegate {
 
     func show() {
         card.needsDisplay = true
-        if let screen = NSScreen.main ?? NSScreen.screens.first {
-            let rect = screen.visibleFrame
-            panel.setFrameTopLeftPoint(NSPoint(x: rect.maxX - panel.frame.width - 18, y: rect.maxY - 18))
-        }
+        // New messages and avatar refreshes retain the user's chosen position.
+        if !panel.isVisible { restorePosition() }
         panel.orderFrontRegardless()
     }
 
+    func restorePosition() {
+        let size = panel.frame.size
+        let saved = UserDefaults.standard.dictionary(forKey: "reminderWindowPosition")
+        let point: NSPoint?
+        if let x = saved?["x"] as? NSNumber, let y = saved?["y"] as? NSNumber {
+            point = NSPoint(x: x.doubleValue, y: y.doubleValue)
+        } else { point = nil }
+        let screens = NSScreen.screens
+        let screen = point.flatMap { p in screens.first { $0.visibleFrame.contains(NSPoint(x: p.x + size.width/2, y: p.y + size.height/2)) } } ?? NSScreen.main ?? screens.first
+        guard let screen else { return }
+        let rect = screen.visibleFrame
+        let desired = point ?? NSPoint(x: rect.maxX-size.width-18, y: rect.maxY-size.height-18)
+        panel.setFrameOrigin(NSPoint(x: min(max(desired.x, rect.minX+8), max(rect.minX+8, rect.maxX-size.width-8)),
+                                     y: min(max(desired.y, rect.minY+8), max(rect.minY+8, rect.maxY-size.height-8))))
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        UserDefaults.standard.set(["x": panel.frame.minX, "y": panel.frame.minY], forKey: "reminderWindowPosition")
+    }
+
     @objc func test() {
+        dismiss()
         displayedCustomerID = ""
-        latestID = nil
         card.avatar = nil
         card.heading = "牛信提醒 · 样式预览"
         card.customer = "提醒已就绪"
         card.account = "等待客户消息"
-        card.subtitle = "这是一条测试提醒，不是买家消息"
+        card.subtitle = "拖动蓝色标题栏，位置自动记忆"
         show()
     }
     func seedPortraits() {
@@ -310,8 +375,9 @@ final class Reminder: NSObject, NSApplicationDelegate {
         }.resume()
     }
     @objc func dismiss() {
-        count = 0
-        latestID = nil
+        reminders.clear()
+        needsMessageRefresh = false
+        displayedCustomerID = ""
         panel.orderOut(nil)
     }
     @objc func openApp() {
