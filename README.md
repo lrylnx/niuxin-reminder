@@ -8,7 +8,7 @@
 
 ## 下载与使用
 
-从 [Releases](https://github.com/lrylnx/niuxin-reminder/releases/latest) 下载已发布的版本。1.0.1 从源码构建后，更新包位于 `dist/NiuxinReminder-1.0.1-universal.zip`；解压并将 **牛信提醒.app** 放到固定位置 `/Applications/牛信提醒.app`。支持 Apple Silicon 与 Intel；最低系统版本 macOS 12。
+从 [Releases](https://github.com/lrylnx/niuxin-reminder/releases/latest) 下载已发布的版本。1.0.2 从源码构建后，更新包位于 `dist/NiuxinReminder-1.0.2-universal.zip`；解压并将 **牛信提醒.app** 放到固定位置 `/Applications/牛信提醒.app`。支持 Apple Silicon 与 Intel；最低系统版本 macOS 12。
 
 1. 启动千牛并登录，再启动牛信提醒。
 2. 在右上角菜单栏找到牛角消息气泡图标。通过“预览提醒样式”检查弹窗。
@@ -24,7 +24,7 @@
 - 按住蓝色标题栏可拖动，自动保存位置；后续消息与重启后保持位置，显示器变化时自动移回可见区域。卡片正文仍可单击打开千牛。
 - 客户头像按客户 ID 关联，获取失败显示昵称首字。
 - 消息 ID 去重、日志截断与轮转恢复、重复启动检测。
-- 在千牛原生提醒中进入会话、或该会话未读归零时，自动移除对应会话的牛信提醒；其他客户或其他接待账号的提醒保留。全部处理后卡片自动消失。
+- 明确点击千牛原生提醒或聊天内容时，自动移除对应会话的牛信提醒；千牛自动进入会话、后台未读归零不会收起卡片。其他客户或其他接待账号的提醒保留，全部处理后卡片自动消失。
 - 单色模板菜单栏图标，适配浅色/深色菜单栏。
 
 ## 工作原理与数据

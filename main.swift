@@ -200,7 +200,7 @@ final class Reminder: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: "牛信提醒",
-            .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.1",
+            .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.2",
             .credits: NSAttributedString(string: "千牛 macOS 独立消息提醒\n开源项目 · 非阿里巴巴官方应用\ngithub.com/lrylnx/niuxin-reminder\n© 2026 lrylnx · MIT License")
         ])
     }

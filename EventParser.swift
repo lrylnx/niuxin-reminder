@@ -22,19 +22,18 @@ enum EventParser {
         return value("msg.msg.conversationCode", in: line)
     }
 
-    // These app events describe our local conversation, unlike SDK read receipts,
-    // which can describe the buyer reading one of our outgoing messages.
+    // Require an explicit user click. Qianniu also enters conversations and
+    // clears unread counts automatically on arrival, even without user input.
     static func handledConversation(_ line: String) -> String? {
-        if line.contains("][EnterConversation]["),
-           line.contains("MessageDataSourceMessageDataCollector.cpp("),
-           line.contains(") OnEnterConversation]") {
-            return value("m_appConversation", in: line)
+        if line.contains("][CMessageMergeNotifyPresenter OnClicked]["),
+           line.contains("MessageMergeNotifyPresenter.cpp("),
+           line.contains(") OnTreeNodeOrTagClick]") {
+            return value("ccode", in: line)
         }
-        if line.contains("][unread nty!]["),
-           line.contains("AppConversationService.cpp("),
-           line.contains(") DealConvUnreadNumUpdate]"),
-           value("unReadNumber", in: line) == "0" {
-            return value("info.ccode", in: line)
+        if line.contains("][OnClicked]["),
+           line.contains("ChatContentPresenter.cpp("),
+           line.contains(") OnClicked]") {
+            return value("GetCurrentConversation().GetcCode()", in: line)
         }
         return nil
     }

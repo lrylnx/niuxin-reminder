@@ -25,14 +25,21 @@ let otherAccount = "100.1-400.1#11001@cntaobao"
 let enter = "[app][EnterConversation][ bInit=true,m_appConversation=\(conversationA) ][MessageDataSourceMessageDataCollector.cpp(41) OnEnterConversation]"
 let unread = "[app][unread nty!][ info.ccode=\(conversationA),unReadNumber=0,this=0x123 ][AppConversationService.cpp(1632) DealConvUnreadNumUpdate]"
 check(EventParser.arrivalConversation(arrival.replacingOccurrences(of: "msg.msg.msgType=101", with: "msg.msg.msgType=101,msg.msg.conversationCode=\(conversationA)")) == conversationA, "arrival conversation identity")
-check(EventParser.handledConversation(enter) == conversationA, "enter conversation")
-check(EventParser.handledConversation(enter.replacingOccurrences(of: "bInit=true", with: "bInit=false")) == conversationA, "return to existing conversation")
-check(EventParser.handledConversation(unread) == conversationA, "unread cleared")
+check(EventParser.handledConversation(enter) == nil, "automatic conversation entry never dismisses reminder")
+check(EventParser.handledConversation(enter.replacingOccurrences(of: "bInit=true", with: "bInit=false")) == nil, "background conversation switch never dismisses reminder")
+check(EventParser.handledConversation(unread) == nil, "automatic unread zero never dismisses reminder")
 check(EventParser.handledConversation(unread.replacingOccurrences(of: "unReadNumber=0", with: "unReadNumber=1")) == nil, "positive unread keeps reminder")
 check(EventParser.handledConversation(unread.replacingOccurrences(of: "unReadNumber=0", with: "unReadNumber=01")) == nil, "require exact zero")
 check(EventParser.handledConversation(enter.replacingOccurrences(of: "m_appConversation=\(conversationA)", with: "m_appConversation=")) == nil, "missing conversation ignored")
 check(EventParser.handledConversation(enter.replacingOccurrences(of: "MessageDataSourceMessageDataCollector.cpp", with: "Other.cpp")) == nil, "ignore unrelated log source")
 check(EventParser.handledConversation("[BCMessageImp.cpp@OnReadStatusChanged@309] dmsg.is_read=true,dmsg.cid=\(conversationA)") == nil, "buyer read receipts never dismiss reminders")
+let nativeClick = "[app][CMessageMergeNotifyPresenter OnClicked][ ccode=\(conversationA),identifier=3#200 ][MessageMergeNotifyPresenter.cpp(674) OnTreeNodeOrTagClick]"
+let contentClick = "[app][OnClicked][ GetCurrentConversation().GetcCode()=\(conversationA),(int)type=0 ][ChatContentPresenter.cpp(1944) OnClicked]"
+check(EventParser.handledConversation(nativeClick) == conversationA, "explicit native notification click dismisses matching conversation")
+check(EventParser.handledConversation(contentClick) == conversationA, "explicit chat content click dismisses matching conversation")
+check(EventParser.handledConversation(nativeClick.replacingOccurrences(of: "ccode=\(conversationA)", with: "ccode=")) == nil, "native click without identity ignored")
+check(EventParser.handledConversation(nativeClick.replacingOccurrences(of: "MessageMergeNotifyPresenter.cpp", with: "Other.cpp")) == nil, "unrelated notification source ignored")
+check(EventParser.handledConversation("[app][begin delete unreplyed conversation][ ccode=\(conversationA) ][MessageMergeNotifyPresenter.cpp(291) DeleteUnReplyedConversation]") == nil, "background native cleanup never dismisses reminder")
 let correlatedJSON = json.replacingOccurrences(of: "\"newmsgs\":", with: "\"cid\":{\"ccode\":\"\(conversationA)\"},\"newmsgs\":")
 check(EventParser.details("jsonStr=\(correlatedJSON),strEvent=im.singlemsg.onShopRobotReceriveNewMsgs").first?.1.conversationCode == conversationA, "metadata conversation fallback")
 
